@@ -70,22 +70,21 @@ def public_key_to_address(public_key_bytes):
         else: break
     return ''.join(output[::-1])
 
-def private_key_to_wif(private_key):
-    digest = hashlib.sha256(binascii.unhexlify('80' + private_key)).hexdigest()
-    var = hashlib.sha256(binascii.unhexlify(digest)).hexdigest()
-    var = binascii.unhexlify('80' + private_key + var[0:8])
-    alphabet = chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-    value = pad = 0
-    result = ''
-    for i, c in enumerate(var[::-1]): value += 256**i * c
-    while value >= len(alphabet):
-        div, mod = divmod(value, len(alphabet))
-        result, value = chars[mod] + result, div
-    result = chars[value] + result
-    for c in var:
-        if c == 0: pad += 1
+def private_key_to_wif(private_key, compressed=True):
+    extended_key = b'\x80' + binascii.unhexlify(private_key)
+    if compressed:
+        extended_key += b'\x01'
+    checksum = hashlib.sha256(hashlib.sha256(extended_key).digest()).digest()[:4]
+    final_key = extended_key + checksum
+    value = int.from_bytes(final_key, 'big')
+    output = []
+    while value > 0:
+        value, remainder = divmod(value, 58)
+        output.append(ALPHABET[remainder])
+    for byte in final_key:
+        if byte == 0: output.append(ALPHABET[0])
         else: break
-    return chars[0] * pad + result
+    return ''.join(output[::-1])
 
 def main(database, args, counter):
     local_counter = 0
@@ -125,7 +124,7 @@ def main(database, args, counter):
                         found = True
                         with open('plutus.txt', 'a') as plutus:
                             plutus.write('hex private key: ' + private_key_hex + '\n' +
-                                         'WIF private key: ' + str(private_key_to_wif(private_key_hex)) + '\n' +
+                                         'WIF private key: ' + str(private_key_to_wif(private_key_hex, compressed=True)) + '\n' +
                                          'public key: ' + public_key_bytes.hex().upper() + '\n' +
                                          'address: ' + str(address) + '\n\n')
                         break
@@ -150,6 +149,42 @@ def timer():
     print(f"Estimated speed per core: {1/duration:.2f} keys/second")
     sys.exit(0)
 
+def test():
+    # Hardcoded values for testing (Private Key: 1)
+    hex_private_key = "0000000000000000000000000000000000000000000000000000000000000001"
+    expected_wif = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn"
+    expected_public_key_hex = "0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
+    expected_address = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"
+
+    print(f"Testing with Private Key: {hex_private_key}")
+
+    # Test WIF Generation
+    generated_wif = private_key_to_wif(hex_private_key, compressed=True)
+    print(f"Generated WIF: {generated_wif}")
+    if generated_wif == expected_wif:
+        print("WIF Check: PASS")
+    else:
+        print(f"WIF Check: FAIL (Expected {expected_wif})")
+
+    # Test Public Key Generation
+    public_key_bytes = private_key_to_public_key(hex_private_key)
+    generated_public_key_hex = public_key_bytes.hex().upper()
+    print(f"Generated Public Key: {generated_public_key_hex}")
+    if generated_public_key_hex == expected_public_key_hex:
+        print("Public Key Check: PASS")
+    else:
+        print(f"Public Key Check: FAIL (Expected {expected_public_key_hex})")
+
+    # Test Address Generation
+    generated_address = public_key_to_address(public_key_bytes)
+    print(f"Generated Address: {generated_address}")
+    if generated_address == expected_address:
+        print("Address Check: PASS")
+    else:
+        print(f"Address Check: FAIL (Expected {expected_address})")
+    
+    sys.exit(0)
+
 if __name__ == '__main__':
     # Default to (CPU count - 1) to prevent system freezing, but minimum 1
     default_cpu_count = multiprocessing.cpu_count()
@@ -165,9 +200,10 @@ Examples:
   python3 plutus.py -v 1              # Run with verbose output
   python3 plutus.py --cpu-count 4     # Run with 4 CPU cores
   python3 plutus.py time              # Run speed test
+  python3 plutus.py test              # Run brute-force logic test
         '''
     )
-    parser.add_argument('action', nargs='?', default='run', choices=['run', 'time', 'help'], help='Action to perform')
+    parser.add_argument('action', nargs='?', default='run', choices=['run', 'time', 'help', 'test'], help='Action to perform')
     parser.add_argument('--verbose', '-v', type=int, choices=[0, 1], default=0, help='Verbose output (0 or 1)')
     parser.add_argument('--cpu-count', '-c', type=int, default=default_cpu_count, help='Number of CPU cores')
 
@@ -179,6 +215,9 @@ Examples:
 
     if args.action == 'time':
         timer()
+
+    if args.action == 'test':
+        test()
 
     if not (0 < args.cpu_count <= multiprocessing.cpu_count()):
         print(f'Error: cpu_count must be between 1 and {multiprocessing.cpu_count()}')

@@ -83,6 +83,10 @@ Want to know how fast your computer generates a single address? Run the speed te
 Shows the help menu.
 *   **Usage**: `python3 plutus.py help`
 
+### 5. Diagnostic Test (`test`)
+Runs a self-check to verify that the cryptographic functions (Private Key -> WIF -> Public Key -> Address) are calculating correctly.
+*   **Usage**: `python3 plutus.py test`
+
 ## Recent Improvements & TODO
 
 <a href="https://github.com/Isaacdelly/Plutus/issues">Create an issue</a> so I can add more stuff to improve
