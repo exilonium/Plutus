@@ -1,2 +1,2 @@
-coincurve
+coincurve==20.0.0
 requests
